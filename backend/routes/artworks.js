@@ -2,81 +2,73 @@ const express = require('express');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
 const Artwork = require('../models/Artwork');
-const authenticateUser = require('../middleware/authMiddleware');  // Assuming authentication middleware
+const authenticateUser = require('../middleware/authMiddleware');
 const router = express.Router();
 
-// Set up multer storage to store file in memory
+// Multer setup
 const storage = multer.memoryStorage();
-const upload = multer({ storage });  // Define upload middleware here
+const upload = multer({ storage });
 
-// Cloudinary configuration
+// Cloudinary config
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
+  api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Upload Artwork
+// Upload artwork
 router.post('/upload', authenticateUser, upload.single('image'), async (req, res) => {
   const { title, description, tags } = req.body;
   const image = req.file;
-
-  if (!image) {
-    return res.status(400).json({ message: 'Image file is required' });
-  }
+  if (!image) return res.status(400).json({ message: 'Image file is required' });
 
   try {
-    // Start the Cloudinary upload stream
     const uploadStream = cloudinary.uploader.upload_stream(
-      { resource_type: 'image' },  // Automatically detect image format
+      { resource_type: 'image' },
       async (error, result) => {
-        if (error) {
-          console.error('Cloudinary upload error:', error);
-          return res.status(500).json({ message: 'Error uploading image to Cloudinary', error: error.message });
-        }
+        if (error) return res.status(500).json({ message: 'Error uploading image', error: error.message });
 
-        // Creating a new artwork document in the database
         const artwork = new Artwork({
           title,
           description,
-          tags: tags ? tags.split(',') : [],  // Split tags if present, otherwise empty array
-          imageUrl: result.secure_url,  // Cloudinary URL of the uploaded image
-          artist: req.user.id,  // Assuming user authentication is done, passing user id
+          tags: tags ? tags.split(',') : [],
+          imageUrl: result.secure_url,
+          artist: req.user.id,
+          likes: 0,
+          likedUsers: [],  // initialize likedUsers array
         });
 
-        // Save artwork to the database
         await artwork.save();
-        res.status(201).json(artwork);  // Send the artwork object as response
+        res.status(201).json(artwork);
       }
     );
 
-    // Send image buffer to Cloudinary upload stream
     uploadStream.end(image.buffer);
   } catch (err) {
-    console.error('Error during upload process:', err);
     res.status(500).json({ message: 'Error uploading artwork', error: err.message });
   }
 });
 
-// Like Artwork
-// Toggle Like/Unlike Artwork
-// Like/Unlike Artwork (Toggle)
+// Like / Unlike artwork (toggle)
 router.post('/:id/like', authenticateUser, async (req, res) => {
   try {
     const artwork = await Artwork.findById(req.params.id);
     if (!artwork) return res.status(404).json({ message: 'Artwork not found' });
 
-    const userId = req.user._id.toString(); // Ensure it's a string
+    // Ensure likedUsers array exists
+    if (!Array.isArray(artwork.likedUsers)) artwork.likedUsers = [];
+
+    const userId = req.user._id.toString();
     const likedUsers = artwork.likedUsers.map(id => id.toString());
 
     if (likedUsers.includes(userId)) {
       // Unlike
-      artwork.likes = Math.max(artwork.likes - 1, 0); // prevent negative likes
+      artwork.likes = Math.max(artwork.likes - 1, 0);
       artwork.likedUsers = artwork.likedUsers.filter(id => id.toString() !== userId);
     } else {
       // Like
       artwork.likes += 1;
-      artwork.likedUsers.push(req.user._id); // push ObjectId directly
+      artwork.likedUsers.push(req.user._id);
     }
 
     await artwork.save();
@@ -86,7 +78,6 @@ router.post('/:id/like', authenticateUser, async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
-
 
 
 
