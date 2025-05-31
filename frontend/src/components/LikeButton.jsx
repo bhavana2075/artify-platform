@@ -7,26 +7,25 @@ const LikeButton = ({ artworkId }) => {
 
   const token = JSON.parse(localStorage.getItem('user'))?.token;
 
-  // Fetch initial like state
   useEffect(() => {
-    const fetchLikeStatus = async () => {
+    const fetchLikeData = async () => {
       try {
-        const res = await axios.get(`/artworks/${artworkId}`, {
+        // Get like status
+        const isLikedRes = await axios.get(`/artworks/${artworkId}/isLiked`, {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        const user = JSON.parse(localStorage.getItem('user'));
-        const userId = user?._id;
+        // Get total likes
+        const likesRes = await axios.get(`/artworks/${artworkId}/likes`);
 
-        const likedByUser = res.data.likedUsers?.some(id => id === userId);
-        setLiked(likedByUser);
-        setLikesCount(res.data.likes);
+        setLiked(isLikedRes.data.liked);
+        setLikesCount(likesRes.data.likes);
       } catch (err) {
-        console.error('Failed to fetch artwork details:', JSON.stringify(err.response?.data || err.message));
+        console.error('Error fetching like data:', JSON.stringify(err.response?.data || err.message));
       }
     };
 
-    if (token) fetchLikeStatus();
+    if (token) fetchLikeData();
   }, [artworkId, token]);
 
   const handleLike = async () => {
