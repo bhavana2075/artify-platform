@@ -60,31 +60,33 @@ router.post('/upload', authenticateUser, upload.single('image'), async (req, res
 
 // Like Artwork
 // Toggle Like/Unlike Artwork
+// Like/Unlike Artwork (Toggle)
 router.post('/:id/like', authenticateUser, async (req, res) => {
   try {
     const artwork = await Artwork.findById(req.params.id);
     if (!artwork) return res.status(404).json({ message: 'Artwork not found' });
 
-    const userId = req.user._id;
-    const hasLiked = artwork.likedUsers.includes(userId);
+    const userId = req.user._id.toString(); // Ensure it's a string
+    const likedUsers = artwork.likedUsers.map(id => id.toString());
 
-    if (hasLiked) {
+    if (likedUsers.includes(userId)) {
       // Unlike
-      artwork.likes -= 1;
-      artwork.likedUsers.pull(userId);
+      artwork.likes = Math.max(artwork.likes - 1, 0); // prevent negative likes
+      artwork.likedUsers = artwork.likedUsers.filter(id => id.toString() !== userId);
     } else {
       // Like
       artwork.likes += 1;
-      artwork.likedUsers.push(userId);
+      artwork.likedUsers.push(req.user._id); // push ObjectId directly
     }
 
     await artwork.save();
 
-    res.json({ liked: !hasLiked, likes: artwork.likes });
+    res.json({ liked: !likedUsers.includes(userId), likes: artwork.likes });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
+
 
 
 
