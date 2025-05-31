@@ -12,7 +12,7 @@ const Register = () => {
     e.preventDefault();
     try {
       const response = await axios.post(
-        'http://localhost:5000/api/auth/register',
+        'https://artify-platform-backend.onrender.com/api/auth/register',
         {
           username,
           email,

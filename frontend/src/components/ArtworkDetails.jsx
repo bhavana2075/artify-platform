@@ -11,7 +11,7 @@ const ArtworkDetails = () => {
   useEffect(() => {
     const fetchArtwork = async () => {
       try {
-        const response = await axios.get(`http://localhost:5000/api/artworks/${id}`);
+        const response = await axios.get(`https://artify-platform-backend.onrender.com/api/artworks/${id}`);
         setArtwork(response.data);
       } catch (err) {
         console.error('Error fetching artwork', err);
