@@ -6,8 +6,16 @@ const ArtworkSchema = new mongoose.Schema({
   tags: [{ type: String }],
   imageUrl: { type: String, required: true },
   artist: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  likes: { type: Number, default: 0 },
-  likedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // 👈 track users who liked
+  likedUsers: {
+  type: [mongoose.Schema.Types.ObjectId],
+  ref: 'User',
+  default: []
+},
+likes: {
+  type: Number,
+  default: 0
+},
+// 👈 track users who liked
 }, { timestamps: true });
 
 module.exports = mongoose.model('Artwork', ArtworkSchema);
