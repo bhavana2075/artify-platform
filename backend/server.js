@@ -14,7 +14,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 // CORS configuration
 app.use(cors({
-  origin: 'http://localhost:5173', // allow frontend origin
+  origin: 'https://artify-platform-frontend.onrender.com', // allow frontend origin
   credentials: true                // allow cookies/auth headers
 }));
 
