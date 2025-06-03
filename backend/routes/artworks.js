@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const cloudinary = require('cloudinary').v2;
+const mongoose = require('mongoose');
 const Artwork = require('../models/Artwork');
 const authenticateUser = require('../middleware/authMiddleware');
 const router = express.Router();
@@ -13,29 +14,33 @@ const upload = multer({ storage });
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
+  api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Upload artwork
+// Upload Artwork
 router.post('/upload', authenticateUser, upload.single('image'), async (req, res) => {
   const { title, description, tags } = req.body;
   const image = req.file;
-  if (!image) return res.status(400).json({ message: 'Image file is required' });
+
+  if (!image) {
+    return res.status(400).json({ message: 'Image file is required' });
+  }
 
   try {
     const uploadStream = cloudinary.uploader.upload_stream(
       { resource_type: 'image' },
       async (error, result) => {
-        if (error) return res.status(500).json({ message: 'Error uploading image', error: error.message });
+        if (error) {
+          console.error('Cloudinary upload error:', error);
+          return res.status(500).json({ message: 'Error uploading image', error: error.message });
+        }
 
         const artwork = new Artwork({
           title,
           description,
           tags: tags ? tags.split(',') : [],
           imageUrl: result.secure_url,
-          artist: req.user.id,
-          likes: 0,
-          likedUsers: [],  // initialize likedUsers array
+          artist: req.user.id
         });
 
         await artwork.save();
@@ -45,91 +50,92 @@ router.post('/upload', authenticateUser, upload.single('image'), async (req, res
 
     uploadStream.end(image.buffer);
   } catch (err) {
+    console.error('Upload error:', err);
     res.status(500).json({ message: 'Error uploading artwork', error: err.message });
   }
 });
 
-// Like / Unlike artwork (toggle)
+// Like/Unlike Artwork
+// Like/Unlike Artwork
 router.post('/:id/like', authenticateUser, async (req, res) => {
   try {
+    if (!req.user?.id) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+
     const artwork = await Artwork.findById(req.params.id);
-    if (!artwork) return res.status(404).json({ message: 'Artwork not found' });
+    if (!artwork) {
+      return res.status(404).json({ message: 'Artwork not found' });
+    }
 
-    // Ensure likedUsers array exists
-    if (!Array.isArray(artwork.likedUsers)) artwork.likedUsers = [];
+    artwork.likedUsers = (artwork.likedUsers || []).filter(id => id != null);
 
-    const userId = req.user._id.toString();
-    const likedUsers = artwork.likedUsers.map(id => id.toString());
+    const userId = new mongoose.Types.ObjectId(req.user.id);
 
-    if (likedUsers.includes(userId)) {
+    const likeIndex = artwork.likedUsers.findIndex(id => id.equals(userId));
+
+    if (likeIndex >= 0) {
       // Unlike
-      artwork.likes = Math.max(artwork.likes - 1, 0);
-      artwork.likedUsers = artwork.likedUsers.filter(id => id.toString() !== userId);
+      artwork.likes = Math.max(0, artwork.likes - 1);
+      artwork.likedUsers.splice(likeIndex, 1);
     } else {
       // Like
       artwork.likes += 1;
-      artwork.likedUsers.push(req.user._id);
+      artwork.likedUsers.push(userId);
     }
 
     await artwork.save();
 
-    res.json({ liked: !likedUsers.includes(userId), likes: artwork.likes });
+    res.json({
+      success: true,
+      liked: likeIndex === -1,
+      likes: artwork.likes
+    });
   } catch (err) {
+    console.error('Like error:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
 
-
+// Check if liked
 router.get('/:id/isLiked', authenticateUser, async (req, res) => {
-  try {
-    const artwork = await Artwork.findById(req.params.id);
-    if (!artwork) return res.status(404).json({ message: 'Artwork not found' });
-
-    const isLiked = artwork.likedUsers.includes(req.user._id);
-    res.json({ liked: isLiked });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
-  }
-});
-
-router.get('/:id/likes', async (req, res) => {
   try {
     const artwork = await Artwork.findById(req.params.id);
     if (!artwork) {
       return res.status(404).json({ message: 'Artwork not found' });
     }
 
-    res.json({ likes: artwork.likes });
+    const userId = new mongoose.Types.ObjectId(req.user.id);
+    const isLiked = artwork.likedUsers?.some(id => id.equals(userId)) || false;
+
+    res.json({ liked: isLiked });
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 
-
-// GET /api/artworks
-// GET /api/artworks
+// Get all artworks
 router.get('/', async (req, res) => {
   try {
     const artworks = await Artwork.find()
-      .populate('artist', 'username') // 👈 Get username from referenced User model
+      .populate('artist', 'username')
       .sort({ createdAt: -1 });
 
-    const formattedArtworks = artworks.map(art => ({
+    res.json(artworks.map(art => ({
       _id: art._id,
       title: art.title,
       description: art.description,
       tags: art.tags,
       imageUrl: art.imageUrl,
       likes: art.likes,
-      username: art.artist?.username || 'Unknown', // 👈 Add username to frontend
-    }));
-
-    res.json(formattedArtworks);
+   username: art.artist?.username || 'Unknown', 
+    })));
   } catch (err) {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
+
 
 // GET /api/artworks/mine
 router.get('/mine', authenticateUser, async (req, res) => {
@@ -153,15 +159,26 @@ router.get('/mine', authenticateUser, async (req, res) => {
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
-
-// GET /api/artworks/:id
+// Get single artwork by ID
 router.get('/:id', async (req, res) => {
   try {
-    const artwork = await Artwork.findById(req.params.id);
-    if (!artwork) return res.status(404).json({ message: 'Artwork not found' });
-    res.json(artwork);
+    const artwork = await Artwork.findById(req.params.id).populate('artist', 'username');
+    if (!artwork) {
+      return res.status(404).json({ message: 'Artwork not found' });
+    }
+    
+    res.json({
+      _id: artwork._id,
+      title: artwork.title,
+      description: artwork.description,
+      tags: artwork.tags,
+      imageUrl: artwork.imageUrl,
+      likes: artwork.likes,
+      artist: artwork.artist?.username || 'Unknown'
+    });
   } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    console.error('Fetch artwork error:', err);
+    res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
 // DELETE /api/artworks/:id
@@ -229,6 +246,4 @@ router.put('/:id', authenticateUser, upload.single('image'), async (req, res) =>
     res.status(500).json({ message: 'Server error', error: err.message });
   }
 });
-
-
 module.exports = router;

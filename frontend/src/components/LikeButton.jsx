@@ -30,23 +30,26 @@ const LikeButton = ({ artworkId }) => {
   }, [artworkId, token]);
 
   const handleLike = async () => {
-    try {
-      const res = await axios.post(
-        `/artworks/${artworkId}/like`,
-        {},
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+  const token = JSON.parse(localStorage.getItem('user'))?.token;
+  console.log('Token being sent:', token); // ✅ Check if defined
 
-      setLiked(res.data.liked);
-      setLikesCount(res.data.likes);
-    } catch (err) {
-      console.error('Like request failed:', JSON.stringify(err.response?.data || err.message));
-    }
-  };
+  try {
+    const res = await axios.post(
+      `/artworks/${artworkId}/like`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    setLiked(res.data.liked);
+    setLikesCount(res.data.likes);
+  } catch (err) {
+    console.error('Like request failed:', err.response?.status, err.response?.data);
+  }
+};
+
 
   return (
     <button onClick={handleLike}>
